@@ -18,6 +18,7 @@ This project provides a FastAPI backend and a simple HTML frontend for uploading
     
   - Create and activate a Python virtual environment:
     $python -m venv venv
+    
     $.\venv\Scripts\activate
   - Install backend dependencies:
     $pip install -r requirements.txt
