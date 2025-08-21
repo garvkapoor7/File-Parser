@@ -15,14 +15,15 @@ This project provides a FastAPI backend and a simple HTML frontend for uploading
 ### 1. Clone the repository
 
 ### 2. Backend Setup
-
+    
   - Create and activate a Python virtual environment:
     $python -m venv venv
-    
+    $.\venv\Scripts\activate
   - Install backend dependencies:
     $pip install -r requirements.txt
 
-  - Start FastAPI backend:
+  - Start FastAPI backend: (Remember proper file path..  check by executing dir and see where is     your "app" folder)
+  - 
     $uvicorn app.main:app --host 0.0.0.0 --port 8000
 
    - Backend will start on:
