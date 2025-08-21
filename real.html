@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>File Upload & Parsing Progress</title>
+  <style>
+    /* Reset and base */
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #f7f9fc;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 100vh;
+      padding-top: 60px;
+      color: #333;
+    }
+    .container {
+      width: 380px;
+      background: white;
+      box-shadow: 0 2px 12px rgb(0 0 0 / 0.1);
+      padding: 30px 35px 40px;
+      border-radius: 12px;
+      text-align: center;
+    }
+    h2 {
+      margin-bottom: 25px;
+      font-weight: 600;
+      color: #222;
+    }
+    #fileInput {
+      display: block;
+      margin: 0 auto 25px;
+      padding: 10px 12px;
+      width: 100%;
+      border: 2px solid #ccc;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: border-color 0.3s ease;
+    }
+    #fileInput:hover {
+      border-color: #007bff;
+    }
+    #uploadBtn {
+      background-color: #007bff;
+      border: none;
+      color: white;
+      font-size: 16px;
+      padding: 12px 0;
+      width: 100%;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: background-color 0.3s ease;
+      box-shadow: 0 5px 10px rgb(0 123 255 / 0.3);
+    }
+    #uploadBtn:disabled {
+      background-color: #a3c5fe;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+    #uploadBtn:hover:not(:disabled) {
+      background-color: #0056b3;
+      box-shadow: 0 6px 12px rgb(0 86 179 / 0.5);
+    }
+    #progressContainer {
+      margin-top: 35px;
+      background: #ececec;
+      border-radius: 12px;
+      overflow: hidden;
+      height: 30px;
+      position: relative;
+      display: none;
+    }
+    #progressBar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #23d5ab, #02aab0);
+      color: white;
+      font-weight: 700;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      letter-spacing: 1px;
+      border-radius: 12px 0 0 12px;
+      transition: width 0.4s ease;
+      white-space: nowrap;
+    }
+    #statusText {
+      margin-top: 12px;
+      font-size: 16px;
+      font-weight: 600;
+      color: #444;
+      min-height: 24px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>File Upload & Parsing Progress</h2>
+    <input type="file" id="fileInput" />
+    <button id="uploadBtn" disabled>Upload & Track</button>
+
+    <div id="progressContainer">
+      <div id="progressBar">0%</div>
+    </div>
+    <div id="statusText">Select a file to upload</div>
+  </div>
+
+  <script>
+    const fileInput = document.getElementById("fileInput");
+    const uploadBtn = document.getElementById("uploadBtn");
+    const progressBar = document.getElementById("progressBar");
+    const statusText = document.getElementById("statusText");
+    const progressContainer = document.getElementById("progressContainer");
+
+    let ws;
+
+    // Enable Upload button only if file is selected
+    fileInput.addEventListener('change', () => {
+      uploadBtn.disabled = !fileInput.files.length;
+      statusText.textContent = uploadBtn.disabled ? "Select a file to upload" : "";
+      resetProgress();
+    });
+
+    function resetProgress() {
+      progressContainer.style.display = 'none';
+      progressBar.style.width = '0%';
+      progressBar.textContent = '0%';
+    }
+
+    uploadBtn.onclick = async () => {
+      if (!fileInput.files.length) return;
+      const file = fileInput.files[0];
+      const formData = new FormData();
+      formData.append("file", file);
+
+      progressContainer.style.display = 'block';
+      progressBar.style.width = '0%';
+      progressBar.textContent = '0%';
+      statusText.textContent = "Uploading file...";
+      uploadBtn.disabled = true;
+      fileInput.disabled = true;
+
+      try {
+        const response = await fetch("http://127.0.0.1:8000/files", {
+          method: "POST",
+          body: formData,
+          credentials: 'same-origin'
+        });
+
+        if (!response.ok) {
+          let errorText = await response.text();
+          throw new Error("Upload failed: " + response.status + " - " + errorText);
+        }
+
+        const contentType = response.headers.get("content-type") || "";
+        if (!contentType.includes("application/json")) {
+          const text = await response.text();
+          throw new Error("Server did not return JSON. Response: " + text);
+        }
+
+        const data = await response.json();
+        statusText.textContent = "File uploaded. Connecting to progress WebSocket...";
+
+        const fileId = data.file_id;
+        if (ws) ws.close();
+
+        ws = new WebSocket(`ws://127.0.0.1:8000/ws/progress/${fileId}`);
+
+        ws.onopen = () => {
+          statusText.textContent = "Tracking parsing progress...";
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const prog = JSON.parse(event.data);
+            statusText.textContent = `Status: ${prog.status}`;
+            progressBar.style.width = `${prog.progress}%`;
+            progressBar.textContent = `${prog.progress}%`;
+
+            if (prog.progress === 100 && prog.status === "ready") {
+              statusText.textContent = "Parsing complete!";
+              ws.close();
+              uploadBtn.disabled = false;
+              fileInput.disabled = false;
+            }
+          } catch (err) {
+            console.error("Invalid JSON received:", event.data);
+          }
+        };
+
+        ws.onclose = () => {
+          console.log("WebSocket closed");
+          uploadBtn.disabled = false;
+          fileInput.disabled = false;
+        };
+
+        ws.onerror = (error) => {
+          statusText.textContent = "WebSocket error occurred.";
+          console.error("WebSocket error:", error);
+          uploadBtn.disabled = false;
+          fileInput.disabled = false;
+        };
+      } catch (err) {
+        statusText.textContent = "Error: " + err.message;
+        console.error(err);
+        uploadBtn.disabled = false;
+        fileInput.disabled = false;
+      }
+    };
+  </script>
+</body>
+</html>
