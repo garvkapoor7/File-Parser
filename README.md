@@ -44,7 +44,7 @@ This project provides a FastAPI backend and a simple HTML frontend for uploading
 - Run the server:
 
   ```
-  http-server -p 8080
+  ython -m http.server 8080
   ```
 
 - Open the frontend page in your browser:
